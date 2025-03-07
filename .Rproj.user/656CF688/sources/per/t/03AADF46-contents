@@ -1,0 +1,67 @@
+---
+title: "Data Science Project"
+author: "marize"
+date: "2024-08-15"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#INTRODUCTION
+
+In step one, we will simply build the training and validation data sets. In step 2, we'll use the training data to create models and forecast the dependent variable. The best models will be tested against the training and validation sets to determine their accuracy in predicting the dependent variable. Finally, we will present our model, discuss its merits and flaws, and answer any unanswered questions raised during the process.
+
+
+
+```{r}
+# Load and prepare data
+airbnb_data <- read.csv("project_airbnb_data.txt", sep = ";")
+
+# Split data into training and validation sets
+set.seed(2468)
+n <- nrow(airbnb_data)
+train_size <- ceiling(n * 0.75)
+train_index <- sample(1:n, train_size)
+airbnb_train <- airbnb_data[train_index, ]
+airbnb_val <- airbnb_data[-train_index, ]
+
+# Check for missing values
+sum(is.na(airbnb_train))
+
+# Full model
+full_model <- lm(price ~ ., data = airbnb_train)
+summary(full_model) 
+
+# Numeric model
+numeric_model <- lm(price ~ dist + rating + size + rooms + max_guests + bathrooms, data = airbnb_train)
+summary(numeric_model)
+
+# Interaction model
+interaction_model <- lm(price ~ . + size:rooms, data = airbnb_train)
+summary(interaction_model)
+
+# Stepwise model
+library(MASS)
+stepwise_model <- stepAIC(full_model, direction = "both", trace = FALSE)
+summary(stepwise_model)
+
+# Compare models
+models <- list(full_model, numeric_model, interaction_model, stepwise_model)
+model_names <- c("Full Model", "Numeric Model", "Interaction Model", "Stepwise Model")
+adj_r_squared <- sapply(models, function(m) summary(m)$adj.r.squared)
+aic <- sapply(models, AIC)
+comparison <- data.frame(Model = model_names, Adj_R_Squared = adj_r_squared, AIC = aic)
+print(comparison)
+
+# Select best model and make predictions
+best_model <- models[[which.max(adj_r_squared)]]
+predictions <- predict(best_model, newdata = airbnb_val)
+rmse <- sqrt(mean((airbnb_val$price - predictions)^2))
+print(paste("RMSE on validation set:", rmse))
+
+```
+
+

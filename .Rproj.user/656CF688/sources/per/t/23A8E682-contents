@@ -1,0 +1,11 @@
+## Install file
+
+install.packages("ggplot2")
+install.packages("leaps")
+install.packages("nortest")
+install.packages("dplyr")
+install.packages("reshape2")
+install.packages("tinytex")
+install.packages("caret")
+install.packages('caTools')
+install.packages("textreg")

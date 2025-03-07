@@ -1,0 +1,181 @@
+---
+title: "Class example superheroes"
+author: "SVDW"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(reshape2) #you could also use library(reshape)
+library(nortest)
+```
+
+# Class Example
+
+A paediatrician is researching whether children wearing different types of superhero costumes are more likely to harm themselves. The severity of injury of children who have been admitted to a hospital due to superhero roll-playing is displayed in the table below. The severity of the injury is measured on a scale from 0 (no injury) to 100 (fatal). It can be assumed that the data of the different groups are normally distributed. Refer to the data in the Excel file "Superheroes.xlsx".
+
+```{r, echo=FALSE }
+setwd("D://Stellenbosch Uni//Semester2//class//Week2") # set to your own WD, that is, the main project folder
+superheroes = read.table("Superheroes.csv", sep=",", header=T) #transform data from xlsx to csv
+
+
+
+```
+
+Investigate data structures and rewrite to the long format. In addition, we should remove the NA values.
+# complete.cases true if there are no missing values, boolean variable 
+
+```{r}
+str(superheroes)
+summary(superheroes)
+
+superheroes2 = melt(superheroes, variable.name = "Costume", value.name="Injury")
+superheroes2 = superheroes2[complete.cases(superheroes2),]
+dim(superheroes2)
+
+```
+## Explore data visually
+
+Explore the data with boxplots such that a boxplot is created for each costume. Add these boxplots to a single axis and adjust them so that they displayed vertically. Finally, change the order of the levels of the factor variable so that the categories are alphabetical.
+
+# Factor is used to encode a vector as a factor
+
+
+```{r}
+superheroes2$Costume = factor(superheroes2$Costume, levels = c("Batman", "Spiderman", "Superman", "TheHulk"),
+                              labels=c("Batman", "Spiderman", "Superman", "TheHulk"))
+ggplot(superheroes2, aes(x=Injury, y=Costume, fill=Costume)) + geom_boxplot() + coord_flip() + 
+  theme(legend.position = "none")
+
+```
+
+We can improve the graph by making the boxplots descend in order of magnitude
+# Basically measures the severity of each category
+
+```{r}
+superheroes2$Costume = factor(superheroes2$Costume, levels = c("Superman", "Batman", "Spiderman","TheHulk"),
+                              labels=c("Superman", "Batman", "Spiderman","TheHulk"))
+ggplot(superheroes2, aes(x=Injury, y=Costume, fill=Costume)) + geom_boxplot() + coord_flip() + 
+  theme(legend.position = "none")
+
+```
+
+## Question 1
+
+Use the boxplots to discuss the validity of the assumptions for ANOVA.
+ (1) We would see evidence of a normal dist with a boxplot by looking for approximately 
+     symmetrical shapes within the boxplots. Evidence of Hulk,Superman and Batman of symmetrical
+     whilst spiderman seems positively skewed.
+     
+ (2) Homoscedasticity - Wide vs narrow boxplots, width of the boxplots should more or less be of the same length. 
+ 
+ (3) IID
+ 
+ The form of those assumptions will change depending on the technique.
+ Later on they take on form for when we assess the regression model or error
+ Focus is on normality and homoscedasticity.
+ 
+ Independence is necessary in order to do the math behind the statistical models.
+ Independence is usually there when data was randomly selcted from a large population.
+ Independence is very difficult to assess.
+ 
+ Parameters come from distributions, non-parametric means so assumed distribution.
+ Non-parametric tests are less powerful.
+ Power is the probability to reject H0 if there is something to reject (difference)
+ Non-parametric test or ANOVA is the Kruskal-Wallis test, NB in 
+ "D:\\Stellenbosch  Uni\\Semester2\\class\\Week4\\NonParametrics_pt1"
+ Nonparametrics replace the actual observations with the ranks and use the ranks to 
+ calculate the test statistics.
+ 
+ We won't be asked any theory about the hypothesis tests, only the application.
+ Shapiro test: A measure of how well the ordered and standardized sample
+               quantiles fit the standard normal quantiles.
+               
+ 
+ 
+## Question 2
+
+Is there statistical evidence for costumes to cause different severity in injuries? Obtain results and discuss in depth.
+ 
+ # This is going to be in A1
+ # Amount of asterisks are indicator of levels of significance at different severities. 
+ # This example specifically with the p-val states that the reject H0 at 1% significance.
+ 
+ (1) 
+```{r}
+
+ anova(lm(Injury~Costume, superheroes2))
+
+```
+ 
+ (2) Getting the final ANOVA table
+ 
+```{r}
+
+```
+ 
+## Assumptions
+
+Assess normality assumption   
+
+```{r}
+
+lillie.test(superheroes2[superheroes2$Costume == "Superman",][,"Injury"])
+lillie.test(superheroes2[superheroes2$Costume == "Spiderman",][,"Injury"])
+lillie.test(superheroes2[superheroes2$Costume == "TheHulk",][,"Injury"])
+lillie.test(superheroes2[superheroes2$Costume == "Batman",][,"Injury"])
+
+shapiro.test(superheroes$Superman)
+shapiro.test(superheroes$Spiderman)
+shapiro.test(superheroes$TheHulk)
+shapiro.test(superheroes$Batman)
+
+```
+Assess homoscedasticity assumption
+
+```{r}
+# Must be long data format
+
+bartlett.test(formula = Injury ~ Costume, data = superheroes2)
+
+```
+There is no evidence that groups have unequal variances.
+
+# Assumptions will be asked in A1
+
+perform multiple comparisons
+
+```{r}
+
+pairwise.t.test(superheroes2$Injury, superheroes2$Costume, p.adjust.method = "bonferroni")
+
+```
+ We only have evidence to suggest that superman and the hulk are different at 
+ the value of 0.0063.
+ This will be in A1.
+
+## Kruskal Wallis 
+
+```{r}
+KWTDat <- read.csv("KruskalTestData.txt", sep = "\t", header = TRUE)
+head(KWTDat)
+library(reshape2)
+KrusWallTDat <- melt(KWTDat,
+measure.vars = 1:ncol(KWTDat),
+variable.name = 'Time',
+value.name = 'Service')
+
+kruskal.test(KrusWallTDat)
+```
+  
+
+
+
+
+
+
+
+
+

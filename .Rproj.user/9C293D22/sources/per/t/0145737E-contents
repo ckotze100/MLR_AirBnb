@@ -1,0 +1,376 @@
+---
+title: "DSProjP1"
+author: "ChristiaanKotze"
+date: "2024-08-12"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+ 
+## Introduction
+  
+  We have a dataset consisting of 7324 observations and 10 variables,
+  the goal with this data is to see how the different characteristics of each 
+  Airbnb rental influences its price.
+  
+  
+## Installing and loading packages
+
+```{r}
+
+library(ggplot2)
+library(leaps)
+library(nortest)
+library(dplyr)
+library(reshape2)
+library(caret)
+library(caTools)
+library(texreg)
+library(ggpubr)
+library(gridExtra)
+```
+
+## Importing the data and factor categorical variables.
+
+```{r}
+dataA <- read.csv("project_airbnb_data.txt", sep = ";", header = TRUE, stringsAsFactors = TRUE)
+str(dataA)
+summary(dataA)
+
+dataA$season <- as.factor(dataA$season)
+dataA$area <- as.factor(dataA$area)
+dataA$close_to_beach <- as.factor(dataA$close_to_beach)
+dataA$size <- as.numeric(dataA$size)
+dataA$rooms <- as.numeric(dataA$rooms)
+dataA$max_guests <- as.numeric(dataA$max_guests)
+dataA$bathrooms <- as.numeric(dataA$bathrooms)
+str(dataA)
+options(digits = 1)
+```
+ There are some visible issues from the importing of the data like seasons to be 
+ converted into categorical integers and the area variables where the data has spaces.
+  
+## Data Visualisation
+
+Price is our dependent variable, it is the price per night of an airbnb in 
+Cape Town given certain varibales, although we will now examine price and all
+other variables univaritately.
+
+```{r}
+nr_bins = ceiling(1+3.3*log10(nrow(dataA))) 
+bin_width = (max(dataA$price)-min(dataA$price))/nr_bins 
+# Bin size is far to great to be able to visually explore in detail
+
+airbnb_Plot <- ggplot(data=dataA, aes(x = price)) + geom_histogram(binwidth = 0.5)  
+
+airbnb_Plot + geom_histogram(bins = nr_bins) + ggtitle("Histogram of price distribution")
+ + xlim(55,75) 
+
+hist_Dist <- ggplot(data=dataA, aes(x = dist, fill=as.numeric(dist))) + 
+  geom_histogram() + ggtitle("Area distribution") 
+hist_Season <-  ggplot(data=dataA, aes(x = price, fill = as.factor(season))) + 
+  geom_histogram() + ggtitle("Season distribution")
+hist_Rating <- ggplot(data=dataA, aes(x = rating, fill=as.numeric(rating))) +
+  geom_histogram() + ggtitle("Rating distribution")
+hist_Size <- ggplot(data=dataA, aes(x = size, fill=as.numeric(size))) + 
+  geom_histogram() + ggtitle("Size distribution")
+hist_Rooms <- ggplot(data=dataA, aes(x = rooms, fill=as.numeric(rooms))) + 
+  geom_histogram() + ggtitle("Rooms distribution") + 
+  scale_y_continuous(expand = expansion(mult = 0, add = 0))   
+hist_Area <- ggplot(data=dataA, aes(x = price, fill=as.factor(area))) + 
+  geom_histogram() + ggtitle("Area distribution")
+hist_Guests <- ggplot(data=dataA, aes(x = max_guests, fill=as.numeric(max_guests))) + 
+  geom_histogram() + ggtitle("Maximum guests distribution")
+hist_Bath <- ggplot(data=dataA, aes(x = bathrooms, fill=as.numeric(bathrooms))) + 
+  geom_histogram() + ggtitle("Bathrooms distribution")
+hist_CtB <- ggplot(data=dataA, aes(x = price, fill=as.factor(close_to_beach))) + 
+  geom_histogram() + ggtitle("Closeness to beach distribution")
+
+```
+We can clearly see a global mean of nearly R6000 where the graph is centered around.
+
+Distance on its own and then in conjunction with the price.
+We have spaces between our discrete values, these gaps have no meaning,
+but if it were continuous it would have meaning.
+
+```{r}
+
+#hist_Price <- ggplot(dataA, aes(x = price)) +
+#  geom_histogram(binwidth = bin_width, fill = "blue", color = "white") +
+#  labs(title = "Histogram of Price", x = "Price", y = "Count") +
+#  theme_minimal()
+
+density_price <- ggplot(dataA, aes(x = price)) +
+  geom_density(fill = "black", alpha = 0.5) +
+  labs(title = "Density Plot of Price", x = "Price") +
+  theme_minimal()
+
+density_dist <- ggplot(dataA, aes(x = dist)) +
+  geom_density(fill = "red", alpha = 0.5) +
+  labs(title = "Density Plot of Distance", x = "Distance") +
+  theme_minimal()
+
+density_rating <- ggplot(dataA, aes(x = rating)) +
+  geom_density(fill = "blue", alpha = 0.5) +
+  labs(title = "Density Plot of Rating", x = "Rating") +
+  theme_minimal()
+
+density_size <- ggplot(dataA, aes(x = size)) +
+  geom_density(fill = "green", alpha = 0.5) +
+  labs(title = "Density Plot of Size", x = "Rating") +
+  theme_minimal()
+
+grid.arrange(density_price, density_dist, density_rating, density_size)
+
+boxplot_season <- ggplot(dataA, aes(x = season, y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Season", x = "Season", y = "Price") +
+  theme_minimal()
+
+boxplot_area <- ggplot(dataA, aes(x = area, y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Area", x = "Area", y = "Price") +
+  theme_minimal()
+
+boxplot_ctb <- ggplot(dataA, aes(x = close_to_beach, y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Closeness to Beach", x = "Close Beach Proximity", y = "Price") +
+  theme_minimal()
+
+boxplot_rooms <- ggplot(dataA, aes(x = as.factor(rooms), y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Rooms", x = "Rooms", y = "Price") +
+  theme_minimal()
+# How do i get rid of the 5 factor category
+
+boxplot_guests <- ggplot(dataA, aes(x = as.factor(max_guests), y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Maximum Guests", x = "Maximum Guests", y = "Price") +
+  theme_minimal()
+# Mostly normal except for the 7guests, means that prices are usually higher around
+# 7 rooms airbnbs compared to the others. Remove the 10
+
+boxplot_bathrooms <- ggplot(dataA, aes(x = as.factor(bathrooms), y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Bathrooms", x = "Bathrooms", y = "Price") +
+  theme_minimal()
+
+grid.arrange(boxplot_season, boxplot_area, boxplot_ctb, boxplot_rooms,
+             boxplot_guests, boxplot_bathrooms)
+
+
+# Done checking for normality, boxplots show acceptable homoscedasticity.
+# Use boxplots now for numerical vars to assess for homoscedasticity.
+
+scD <- ggplot(dataA, aes(x = dist, y = price)) +
+  geom_point() + 
+  geom_smooth(method = "lm", color = "red") +  
+  labs(title = "Scatter Plot of Price by Distance with Regression Line",
+       x = "Distance",
+       y = "Price") +
+  theme_minimal()
+
+mean(dataA$price)
+scR <- ggplot(dataA, aes(x = rating, y = price)) +
+  geom_point() +  
+  geom_smooth(method = "lm", color = "red") +  
+  labs(title = "Scatter Plot of Price by Rating with Regression Line",
+       x = "Rating",
+       y = "Price") +
+  theme_minimal()
+ 
+
+scS <- ggplot(dataA, aes(x = size, y = price)) +
+  geom_point() +  
+  geom_smooth(method = "lm", color = "red") +  # Add regression line
+  labs(title = "Scatter Plot of Price by Size with Regression Line",
+       x = "Size",
+       y = "Price") +
+  theme_minimal()
+
+
+grid.arrange(scD, scR, scS)
+```
+
+
+
+```{r}
+
+```
+
+
+
+## Data preprocessing
+
+
+ First we check to see if there is any missing data and if so, where they are.
+ 
+```{r}
+print("The amount of missing data values:")
+(coordsT <- (sum(is.na(dataA))))
+if (coordsT != 0) {
+  print("The coordinates of the missing data value:")
+  which(is.na.data.frame(dataA), arr.ind = T, useNames = T)
+}
+
+
+```
+ 
+Put our dist var into bins.
+ 
+```{r}
+
+
+group_distances <- function(data, dist_column) {
+  # Define the breaks for bins: 10 to 25 with a width of 1, and a final bin for 25+
+  breaks <- c(seq(10, 25, by = 1), Inf)  # Create bins from 10 to 25 and one final bin for 25+
+  
+  # Create labels for the bins
+  labels <- c(paste(seq(10, 24, by = 1), seq(11, 25, by = 1), sep = "-"), "25+")
+  
+  # Apply binning using cut()
+  data$dist_grouped <- cut(data[[dist_column]], breaks = breaks, labels = labels, include.lowest = TRUE)
+  
+  return(data)
+}
+```
+ 
+ Test 
+ 
+```{r}
+group_distances(dataA, dist_column = dist)
+```
+ 
+ 
+ Also we want to erase any spaces in the data set
+ 
+```{r}
+dataA <- as.data.frame(apply(dataA, 2, function(dataA) gsub("\\s+", "", dataA)))
+length(unique(dataA$area))
+```
+  Thus we have 4 distinct areas where our Airbnbs in the dataset are located.
+ 
+ 
+## Dummy variables
+
+   We have 3 varaibles that we would like to dummy, namely:
+   
+   -area
+   -season
+   -close_to_beach
+   
+```{r}
+
+dataA$area <- factor(dataA$area, levels= 
+                        c("Atlanticseaboard", "Bloubergstrandregion", "Citybowl", "Southernsuburbs"),
+                        labels= c('1','2','3','4'))
+
+dataA$season <- factor(dataA$season, levels= c("Summer", "Autumn", "Winter", "Spring"), labels= c('1','2','3','4'))
+dataA$close_to_beach<- factor(dataA$close_to_beach, levels= c("Yes", "No"), labels= c('1','2'))
+
+```
+  
+ 
+## Create training and validation data sets
+
+```{r}
+
+set.seed(123)
+
+split <- sample.split(dataA$price, SplitRatio = 0.8)
+trainingData <- subset(dataA, split==T)
+testData <- subset(dataA, split==F)
+
+```
+
+ 
+## Lets now explore each variable graphically
+
+   Lets take a look at each variable's count and see what features more than others.
+ 
+ 
+ 
+## ANOVA
+
+   Starting out with one factor ANOVA lets see what we can find about the influence
+   of the different factors on the price.
+    
+   
+```{r}
+oneFactorANOVA <- function(data, x_var) {
+  
+  # Ensure x_var is a character string
+  x_var <- as.character(substitute(x_var))
+  
+  # Exclude the response variable from the data frame
+  dat1 <- data[, !names(data) %in% x_var]
+  
+  # Get column names of predictors
+  col_names <- colnames(dat1)
+  
+  # Initialize list to store ANOVA results
+  results <- list()
+  
+  # Loop through each predictor variable starting from the second column
+  for (i in 1:length(col_names)) {
+    # Construct the formula
+    formula_string <- paste(x_var, "~", col_names[i])
+    formula <- as.formula(formula_string)
+    
+    # Fit the linear model
+    model_fit <- lm(formula, data = data)
+    
+    # Perform ANOVA
+    anova_model <- anova(model_fit)
+    
+    # Store the results in the list
+    as.(results[[col_names[i]]]) <- anova_model
+    
+    # save data to output file
+    texreg::htmlreg(list(results[[i]]),file='Linear regression output.doc')
+    
+  }
+  
+  return(results)
+}
+
+```
+
+```{r}
+r1 <- lm(formula = price~ dist + season + rating + size + rooms + area + max_guests + bathrooms + close_to_beach , data = trainingData)
+
+r2 <- lm(formula = price~ dist + season + rating + size + rooms + area + max_guests + bathrooms, data = trainingData)
+
+r3 <- lm(formula = price~ dist + season + rating + size + rooms + area + max_guests , data = trainingData)
+
+r4 <- lm(formula = price~ dist + season + rating + size + rooms + area, data = trainingData)
+
+r5 <- lm(formula = price~ dist + season + rating + size + rooms, data = trainingData)
+
+r6 <- lm(formula = price~ dist + season + rating + size, data = trainingData)
+
+r7 <- lm(formula = price~ dist + season + rating, data = trainingData)
+
+r8 <- lm(formula = price~ dist + season, data = trainingData)
+
+r9 <- lm(formula = price~ dist, data = trainingData)
+
+```
+## Export results to file
+
+```{r}
+library(texreg)
+texreg::htmlreg(list(r1,r2,r3,r4,r5,r6,r7,r8,r9), file='interpretOut.doc')
+
+```
+ 
+   
+    
+
+
+   
+   
+   
+  
+
+

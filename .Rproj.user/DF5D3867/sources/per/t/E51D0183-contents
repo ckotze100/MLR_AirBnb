@@ -1,0 +1,223 @@
+---
+title: "DSProjP1"
+author: "ChristiaanKotze"
+date: "2024-08-12"
+output: pdf_document
+---
+ 
+## Introduction
+  
+  We have a dataset consisting of 7324 observations and 10 variables,
+  the goal with this data is to see how the different characteristics of each 
+  Airbnb rental influences its price.
+  
+  
+## Installing and loading packages
+
+```{r}
+
+library(ggplot2)
+library(leaps)
+library(nortest)
+library(dplyr)
+library(reshape2)
+library(caret)
+library(caTools)
+library(texreg)
+```
+
+## Importing the data and factor categorical variables.
+
+```{r}
+dataA <- read.csv("project_airbnb_data.txt", sep = ";", header = TRUE, stringsAsFactors = TRUE)
+str(dataA)
+summary(dataA)
+
+dataA$season <- as.factor(dataA$season)
+dataA$area <- as.factor(dataA$area)
+dataA$close_to_beach <- as.factor(dataA$close_to_beach)
+dataA$size <- as.numeric(dataA$size)
+dataA$rooms <- as.numeric(dataA$rooms)
+dataA$max_guests <- as.numeric(dataA$max_guests)
+dataA$bathrooms <- as.numeric(dataA$bathrooms)
+str(dataA)
+options(digits = 1)
+```
+ There are some visible issues from the importing of the data like seasons to be 
+ converted into categorical integers and the area variables where the data has spaces.
+  
+
+## Data preprocessing
+
+
+ First we check to see if there is any missing data and if so, where they are.
+ 
+```{r}
+print("The amount of missing data values:")
+(coordsT <- (sum(is.na(dataA))))
+if (coordsT != 0) {
+  print("The coordinates of the missing data value:")
+  which(is.na.data.frame(dataA), arr.ind = T, useNames = T)
+}
+
+
+```
+ 
+Put our dist var into bins.
+ 
+```{r}
+
+
+group_distances <- function(data, dist_column) {
+  # Define the breaks for bins: 10 to 25 with a width of 1, and a final bin for 25+
+  breaks <- c(seq(10, 25, by = 1), Inf)  # Create bins from 10 to 25 and one final bin for 25+
+  
+  # Create labels for the bins
+  labels <- c(paste(seq(10, 24, by = 1), seq(11, 25, by = 1), sep = "-"), "25+")
+  
+  # Apply binning using cut()
+  data$dist_grouped <- cut(data[[dist_column]], breaks = breaks, labels = labels, include.lowest = TRUE)
+  
+  return(data)
+}
+```
+ 
+ Test 
+ 
+```{r}
+group_distances(dataA,dist_column = dist)
+```
+ 
+ 
+ Also we want to erase any spaces in the data set
+ 
+```{r}
+dataA <- as.data.frame(apply(dataA, 2, function(dataA) gsub("\\s+", "", dataA)))
+length(unique(dataA$area))
+```
+  Thus we have 4 distinct areas where our Airbnbs in the dataset are located.
+ 
+ 
+## Dummy variables
+
+   We have 3 varaibles that we would like to dummy, namely:
+   
+   -area
+   -season
+   -close_to_beach
+   
+```{r}
+
+dataA$area <- factor(dataA$area, levels= 
+                        c("Atlanticseaboard", "Bloubergstrandregion", "Citybowl", "Southernsuburbs"),
+                        labels= c('1','2','3','4'))
+
+dataA$season <- factor(dataA$season, levels= c("Summer", "Autumn", "Winter", "Spring"), labels= c('1','2','3','4'))
+dataA$close_to_beach<- factor(dataA$close_to_beach, levels= c("Yes", "No"), labels= c('1','2'))
+
+```
+  
+ 
+## Create training and validation data sets
+
+```{r}
+
+set.seed(123)
+
+split <- sample.split(dataA$price, SplitRatio = 0.8)
+trainingData <- subset(dataA, split==T)
+testData <- subset(dataA, split==F)
+
+```
+
+ 
+## Lets now explore each variable graphically
+
+   Lets take a look at each variable's count and see what features more than others.
+ 
+ 
+ 
+## ANOVA
+
+   Starting out with one factor ANOVA lets see what we can find about the influence
+   of the different factors on the price.
+    
+   
+```{r}
+oneFactorANOVA <- function(data, x_var) {
+  
+  # Ensure x_var is a character string
+  x_var <- as.character(substitute(x_var))
+  
+  # Exclude the response variable from the data frame
+  dat1 <- data[, !names(data) %in% x_var]
+  
+  # Get column names of predictors
+  col_names <- colnames(dat1)
+  
+  # Initialize list to store ANOVA results
+  results <- list()
+  
+  # Loop through each predictor variable starting from the second column
+  for (i in 1:length(col_names)) {
+    # Construct the formula
+    formula_string <- paste(x_var, "~", col_names[i])
+    formula <- as.formula(formula_string)
+    
+    # Fit the linear model
+    model_fit <- lm(formula, data = data)
+    
+    # Perform ANOVA
+    anova_model <- anova(model_fit)
+    
+    # Store the results in the list
+    as.(results[[col_names[i]]]) <- anova_model
+    
+    # save data to output file
+    texreg::htmlreg(list(results[[i]]),file='Linear regression output.doc')
+    
+  }
+  
+  return(results)
+}
+
+```
+
+```{r}
+r1 <- lm(formula = price~ dist + season + rating + size + rooms + area + max_guests + bathrooms + close_to_beach , data = trainingData)
+
+r2 <- lm(formula = price~ dist + season + rating + size + rooms + area + max_guests + bathrooms, data = trainingData)
+
+r3 <- lm(formula = price~ dist + season + rating + size + rooms + area + max_guests , data = trainingData)
+
+r4 <- lm(formula = price~ dist + season + rating + size + rooms + area, data = trainingData)
+
+r5 <- lm(formula = price~ dist + season + rating + size + rooms, data = trainingData)
+
+r6 <- lm(formula = price~ dist + season + rating + size, data = trainingData)
+
+r7 <- lm(formula = price~ dist + season + rating, data = trainingData)
+
+r8 <- lm(formula = price~ dist + season, data = trainingData)
+
+r9 <- lm(formula = price~ dist, data = trainingData)
+
+```
+## Export results to file
+
+```{r}
+library(texreg)
+texreg::htmlreg(list(r1,r2,r3,r4,r5,r6,r7,r8,r9),file='interpretOut.doc')
+
+```
+ If data looks bimodal make it categorical, but if its normally distributed keep it numerical.    
+   
+    
+
+
+   
+   
+   
+  
+
+

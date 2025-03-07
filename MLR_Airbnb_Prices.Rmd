@@ -1,0 +1,425 @@
+---
+title: "MLR_Airbnb_Prices"
+author: "ChristiaanKotze"
+date: "2024-10-01"
+output: pdf_document
+---
+
+Import data
+```{r}
+setwd("F:\\Stellenbosch Uni\\Semester2\\DSProject")
+dat <- read.csv("F:\\Stellenbosch Uni\\Semester2\\DSProject\\project_airbnb_data.txt", sep = ";", header = T, stringsAsFactors = T)
+
+test <- read.csv("F:\\Stellenbosch Uni\\Semester2\\DSProject\\project_airbnb_data_test.txt", sep = ";", header = T, stringsAsFactors = T)
+```
+
+Install all the provided libraries, we also additionally installed the Metrics package 
+for the ease of computing the RMSE as well as the car package to check for autocorrelation.
+Also installed the gridExtra package for the arrangement of graphs in visualisation to assess the data.
+
+```{r, include=FALSE}
+library(tinytex)
+library(leaps)
+library(nortest)
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(ggpubr)
+library(Metrics)
+library(car)
+library(gridExtra)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r,include=FALSE, eval=FALSE}
+# Visual assessments for normality and homoscedasticity were conducted in the Visual Analysis chunk.
+
+# Visual Analysis
+# Step 0 Data Exploration
+
+nr_bins = ceiling(1+3.3*log10(nrow(dat))) 
+bin_width = (max(dat$price)-min(dat$price))/nr_bins 
+
+airbnb_Plot <- ggplot(data=dat, aes(x = price)) + geom_histogram(binwidth = 0.5)  
+
+airbnb_Plot + geom_histogram(bins = nr_bins) + ggtitle("Histogram of price distribution") +
+  xlim(55,75) 
+
+hist_Dist <- ggplot(data=dat, aes(x = dist, fill=as.numeric(dist))) + 
+  geom_histogram() + ggtitle("Area distribution") 
+hist_Season <-  ggplot(data=dat, aes(x = price, fill = as.factor(season))) + 
+  geom_histogram() + ggtitle("Season distribution")
+hist_Rating <- ggplot(data=dat, aes(x = rating, fill=as.numeric(rating))) +
+  geom_histogram() + ggtitle("Rating distribution")
+hist_Size <- ggplot(data=dat, aes(x = size, fill=as.numeric(size))) + 
+  geom_histogram() + ggtitle("Size distribution")
+hist_Rooms <- ggplot(data=dat, aes(x = rooms, fill=as.numeric(rooms))) + 
+  geom_histogram() + ggtitle("Rooms distribution") + 
+  scale_y_continuous(expand = expansion(mult = 0, add = 0))   
+hist_Area <- ggplot(data=dat, aes(x = price, fill=as.factor(area))) + 
+  geom_histogram() + ggtitle("Area distribution")
+hist_Guests <- ggplot(data=dat, aes(x = max_guests, fill=as.numeric(max_guests))) + 
+  geom_histogram() + ggtitle("Maximum guests distribution")
+hist_Bath <- ggplot(data=dat, aes(x = bathrooms, fill=as.numeric(bathrooms))) + 
+  geom_histogram() + ggtitle("Bathrooms distribution")
+hist_CtB <- ggplot(data=dat, aes(x = price, fill=as.factor(close_to_beach))) + 
+  geom_histogram() + ggtitle("Closeness to beach distribution")
+
+density_price <- ggplot(dat, aes(x = price)) +
+  geom_density(fill = "black", alpha = 0.5) +
+  labs(title = "Density Plot of Price", x = "Price") +
+  theme_minimal()
+
+density_dist <- ggplot(dat, aes(x = dist)) +
+  geom_density(fill = "red", alpha = 0.5) +
+  labs(title = "Density Plot of Distance", x = "Distance") +
+  theme_minimal()
+
+density_rating <- ggplot(dat, aes(x = rating)) +
+  geom_density(fill = "blue", alpha = 0.5) +
+  labs(title = "Density Plot of Rating", x = "Rating") +
+  theme_minimal()
+
+density_size <- ggplot(dat, aes(x = size)) +
+  geom_density(fill = "green", alpha = 0.5) +
+  labs(title = "Density Plot of Size", x = "Rating") +
+  theme_minimal()
+
+grid.arrange(density_price, density_dist, density_rating, density_size)
+
+boxplot_season <- ggplot(dat, aes(x = season, y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Season", x = "Season", y = "Price") +
+  theme_minimal()
+
+boxplot_area <- ggplot(dat, aes(x = area, y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Area", x = "Area", y = "Price") +
+  theme_minimal()
+
+boxplot_ctb <- ggplot(dat, aes(x = close_to_beach, y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Closeness to Beach", x = "Close Beach Proximity", y = "Price") +
+  theme_minimal()
+
+boxplot_rooms <- ggplot(dat, aes(x = as.factor(rooms), y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Rooms", x = "Rooms", y = "Price") +
+  theme_minimal()
+# How do i get rid of the 5 factor category
+
+boxplot_guests <- ggplot(dat, aes(x = as.factor(max_guests), y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Maximum Guests", x = "Maximum Guests", y = "Price") +
+  theme_minimal()
+# Mostly normal except for the 7guests, means that prices are usually higher around
+# 7 rooms airbnbs compared to the others. Remove the 10
+
+boxplot_bathrooms <- ggplot(dat, aes(x = as.factor(bathrooms), y = price)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot of Price by Bathrooms", x = "Bathrooms", y = "Price") +
+  theme_minimal()
+
+grid.arrange(boxplot_season, boxplot_area, boxplot_ctb, boxplot_rooms,
+             boxplot_guests, boxplot_bathrooms)
+
+
+# Done checking for normality, boxplots show acceptable homoscedasticity.
+# Use boxplots now for numerical vars to assess for homoscedasticity.
+
+scD <- ggplot(dat, aes(x = dist, y = price)) +
+  geom_point() + 
+  geom_smooth(method = "lm", color = "red") +  
+  labs(title = "Scatter Plot of Price by Distance with Regression Line",
+       x = "Distance",
+       y = "Price") +
+  theme_minimal()
+
+scR <- ggplot(dat, aes(x = rating, y = price)) +
+  geom_point() +  
+  geom_smooth(method = "lm", color = "red") +  
+  labs(title = "Scatter Plot of Price by Rating with Regression Line",
+       x = "Rating",
+       y = "Price") +
+  theme_minimal()
+ 
+
+scS <- ggplot(dat, aes(x = size, y = price)) +
+  geom_point() +  
+  geom_smooth(method = "lm", color = "red") +  # Add regression line
+  labs(title = "Scatter Plot of Price by Size with Regression Line",
+       x = "Size",
+       y = "Price") +
+  theme_minimal()
+
+
+grid.arrange(scD, scR, scS)
+```
+
+In preprocessing we focused on the scaling of the numerical variables to mean zero.
+For the factor variables we created dummy variables for each of the four factors 
+of season and area each. The Close to beach variables the same method was used 
+and only the Close_to_beachYes column was included in the cleaned data.
+Remove the old factor columns and replace with dummy vars.
+Remove 55 horizontal outliers.
+```{r}
+ggplot(dat, aes(x = price)) + 
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.7) + 
+  facet_grid(area ~ season) +
+  labs(title = "Price Distribution by Area and Season", x = "Price", y = "Count") +
+  theme_minimal()
+datPP <- dat 
+
+# Convert 'season' and 'close_to_beach' into factors if not already
+datPP$season <- as.factor(datPP$season)
+datPP$close_to_beach <- as.factor(datPP$close_to_beach)
+
+# Create dummy variables for each season level
+season_dummies <- model.matrix(~ season - 1, data = datPP)
+
+# Add the dummy variables back to the original data frame
+datPP <- cbind(datPP, season_dummies)
+datPP$season <- NULL
+
+# Convert 'close_to_beach' to a factor (if it's not already)
+datPP$close_to_beach <- as.factor(datPP$close_to_beach)
+
+# Create a dummy variable for 'close_to_beach'
+# Assuming "Yes" = 1, "No" = 0
+datPP$close_to_beachYes <- ifelse(datPP$close_to_beach == "Yes", 1, 0)
+
+# Optionally, remove the original 'close_to_beach' column
+datPP$close_to_beach <- NULL
+
+# Create dummy variables for each level of 'area'
+area_dummies <- model.matrix(~ area - 1, data = datPP)
+
+# Rename the columns to the desired names
+colnames(area_dummies) <- c("areaA", "areaB", "areaC", "areaS")
+
+# Add the dummy variables back to the original data frame
+datPP <- cbind(datPP, area_dummies)
+datPP$area_num <- NULL
+
+# Scale numerical variables (standardization)
+numeric_cols <- c("dist", "rating", "size", "rooms", "max_guests", "bathrooms")
+datPP[numeric_cols] <- scale(datPP[numeric_cols])
+
+# Calculate Z-scores for price and filter out extreme outliers horizontal
+z_scores <- scale(datPP$price)
+datPP <- datPP[abs(z_scores) < 3, ]  # Keep only data within 3 standard deviations
+
+scaled_data <- datPP
+
+```
+
+Data Splitting
+The 80/20 split was chosen to allocate 80% of the data for training and 20% for validation, providing a sufficient amount of data for the model to learn while keeping enough data aside to evaluate model performance. This split is a standard practice, balancing the trade-off between training model accuracy and avoiding overfitting. Alternative splits (e.g., 70/30) were considered, but 80/20 was selected to maximize the model's learning capacity.
+```{r}
+set.seed(1234)
+sample <- sample(c(TRUE, FALSE), nrow(scaled_data), replace=TRUE, prob=c(0.8,0.2))
+train  <- scaled_data[sample, ]
+valid   <- scaled_data[!sample, ]
+```
+
+The goal of the model is to estimate the price of an Airbnb rental given a certain set of independent
+variables, we specify the model such that:
+$$y = \beta_0 + \beta_1x_1 + ... + \beta_px_p + \epsilon$$
+The first step in maximizing the accuracy of our predictions is variable selection through forward and backward
+stepwise regression using the Akaike Information Criterion as our metric. We suppress our output by setting trace
+to false. By using both forward and backward stepwise regression, we got to an AIC of 82774.69 on both directions.
+The selected variables are outlined in the when implementing polynomials.
+
+Forward Stepwise Regression  
+```{r}
+baseModel <- lm(price ~ 1, train)
+fwd <- step((baseModel), direction= "forward", list(lower=~1, upper=~dist+seasonAutumn+seasonSpring+                                                    rating+seasonSummer+areaA+areaB+areaC+areaS+bathrooms+close_to_beachYes+ 
+                                                    seasonWinter+max_guests+size+rooms), data = train
+                       , trace = F)
+pairs(~ price + dist + rating + size + max_guests + bathrooms, data = scaled_data, 
+       ,main = "Scatterplot Matrix")
+```
+
+Backward Stepwise Regression
+```{r}
+model_All <- lm(price ~ areaA + areaB + areaC + areaS + seasonWinter + seasonAutumn + close_to_beachYes + 
+                  seasonSpring + max_guests + rating + size + bathrooms + dist, train)
+bwd <- step((model_All), direction= "backward", list(lower=~1, upper=~.),  data = train
+                       , trace = F)
+```
+
+After variable selection, we define a function: $$\hat{y} = price ~ areaA + areaB + areaC + seasonWinter$$ 
+$$+ seasonAutumn + close_to_beachYes + seasonSpring + poly(max_guests, d) + poly(rating, d) + poly(size, d) $$
+$$+ poly(bathrooms, d) + poly(dist, d)$$
+Numerical values are then put through an algorithm which assesses the degree of the polynomial which 
+provides the best fit for the data, as you run the algorithm, you will encounter errors stating that the 
+'degree' must be less than the number of unique points, which is just the numeric overflow, the final 
+specified degree of polynomials is stated at line 314.
+
+Polynomial terms were used to capture non-linear relationships between variables and price. High-degree polynomials (e.g., degrees up to 25) were tested to allow for maximum flexibility in modeling these relationships. However, the trade-off is that higher-degree polynomials can increase model complexity and risk overfitting, so careful evaluation of RMSE was necessary to select the optimal degree.
+
+```{r}
+evaluate_polynomial_model <- function(degree, train_data) {
+  model <- lm(price ~ areaA + areaB + areaC + seasonWinter + seasonAutumn  
+                      + close_to_beachYes + seasonSpring + poly(max_guests, 10)
+                      + poly(rating, d) + poly(size, d) 
+                      + poly(bathrooms, 3) + poly(dist, d), train)
+  predictions <- predict(model, newdata = train_data)
+  rmse <- sqrt(mean((predictions - train_data$price)^2))
+  return(rmse)
+}
+
+# Initialize a vector to store RMSE values
+degree_range <- 1:25
+rmse_values <- numeric(length(degree_range))
+
+# Evaluate models for different polynomial degrees
+for (d in degree_range) {
+  rmse_values[d] <- evaluate_polynomial_model(d, train)
+}
+```
+
+We assessed the multicollinearity at a level of 0.7 and -0.7, the only two variables that
+exhibited a multicollinear relationship of that magnitude was between $$rooms \cap maxguests$$
+As rooms is not included in the model we have no multicollinear relationships.
+
+```{r, eval = FALSE}
+num_data <- scaled_data[sapply(train, is.numeric)]
+cor_mat <- cor(num_data[ , -which(names(num_data) == "price")])
+View(cor_mat) 
+```
+
+Select the variables from the stepwise model (backward) and square the independent variable terms to
+find significant first order interactions. From this analyses we found that the significant relationships
+are: $$(areaS:seasonSpring) \cap (areaB:guestsToBath) \cap (areaB:seasonAutumn) \cap (size:areaC) \cap
+(rating:seasonSpring) \cap (dist:guestsToBath)$$
+
+We have decided against the use of second order interactions for several reasons such as: computing intensity,
+complexity and minimal gains.
+First-order interactions were included to capture potential combined effects of variables on price, while second-order interactions were excluded due to computational complexity and diminishing returns in terms of model performance.
+
+```{r}
+bwd4First <- lm(price ~ (areaA + areaB + areaC + seasonWinter + seasonAutumn + 
+    close_to_beachYes + seasonSpring + max_guests + rating + 
+    size + bathrooms + dist)^2, train)
+```
+
+The below model is the final specified linear model which produced the best results against the validation data.
+Each of the numerical predictor variables are set to a certain polynomial degree which minimizes RMSE.
+These polynomial degrees were found through trial and error in the above polynomials code chunk on line 265.
+
+The introduction of polynomial terms helped reduce RMSE by better capturing non-linear relationships between price and predictors like max_guests, rating, and distance. For example, after testing various degrees, the final model with polynomials of degree 10 for max_guests and degree 25 for rating minimized RMSE. Similarly, the removal of outliers (those beyond 3 standard deviations) improved model fit by eliminating extreme values that skewed predictions, further reducing the error.
+
+```{r}
+pPoly_M_LM <- lm(price ~ areaA + areaB + areaC + seasonWinter+ seasonAutumn + close_to_beachYes
+                      + seasonSpring + poly(max_guests, 10) + poly(rating, 25) + poly(size, 25)
+                      + poly(bathrooms, 3) + poly(dist, 18) + areaC:seasonSpring +areaB:seasonSpring +
+                        areaB:seasonWinter + areaA:seasonSpring + (areaS:seasonAutumn) + areaS:seasonSummer
+                      + areaB:close_to_beachYes + areaC:close_to_beachYes, train)
+
+fLM <- pPoly_M_LM
+
+# Get residuals and fitted values
+residuals <- resid(fLM)
+fitted_values <- fitted(fLM)
+
+residuals_df <- data.frame(Fitted = fitted_values, Residuals = residuals)
+
+ggplot(residuals_df, aes(x = Fitted, y = Residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red") +  # Add horizontal line at y = 0
+  labs(title = "Residuals vs Fitted Values",
+       x = "Fitted Values",
+       y = "Residuals") +
+  theme_minimal()
+
+```
+
+We have specified the final model as such: 
+$\hat{y}= -5835.84 + 192.81x_1 - 152.22x_2 - 42.01x_3 - 402.75x_4 - 260.17x_5 + 253.00x_6 + 1095.63x_7 + 3179.85x_8 - 418.83x_9 - 1588.67x_{10} - 1627.56x_{11} - 758.02x_{12} - 234.51x_{13} + 1623.56x_{14} + 2327.89x_{15} +	543.41x_{16} - 610.56x_{17} + 2392.35x_{18}	- 1102.82x_{19}	- 1238.06x_{20} +	2490.23x_{21} +	219.1x_{22}	- 1821.38x_{23}	- 315.31x_{24} + 871.97x_{25}	- 689.77x_{26} - 215.26x_{27}	- 264.98x_{28} - 904.09x_{29}	- 192.39x_{30} - 1098.6x_{31} +	362.5x_{32} - 213.16x_{33} - 468.09x_{34} +	2327.51x_{35} +	1150.42x_{36} +	1105.45x_{37}	- 12.05x_{38}	- 1161.07x_{39}	- 1090.9x_{40}	- 833.86x_{41} + 791.24x_{42}	- 1833.42x_{43}	- 884.8x_{44} +	769.21x_{45} + 363.74x_{46}	- 499.14x_{47} - 656.57x_{48}	- 683.43x_{49} - 97.66x_{50} + 1618.65x_{51} +	727.75x_{52} + 357.19x_{53}	- 972.19x_{54} +	2180.49x_{55}	- 1692.74x_{56} +	747.41x_{57}	- 845.55x_{58} + 107.49x_{59}	- 142.55x_{60} - 2195.16x_{61} + 760.14x_{62}	- 661.78x_{63} + 1531.78x_{64} - 2450.57x_{65} - 3615.96x_{66}	- 264.88x_{67} - 2181.13x_{68} + 1627.92x_{69} + 1758.16x_{70} + 1678.38x_{71} - 259.38x_{72}	- 805.37x_{73} - 1876.11x_{74} + 62.17x_{75} + 240.17x_{76} + 1911.4x_{77} + 401.58x_{78} + 393.77x_{79} - 1051.03x_{80} + 2057.65x_{81} + 1644.07x_{82} - 1496.17x_{83} - 412.53x_{84}	- 1219.65x_{85}	- 2428.24x_{86} + 408.11x_{87} + 1349.28x_{88} + 179.48x_{89} +	193.85x_{90} + 137.43x_{91} + 179.97x_{92} + 156.11x_{93} + 145.75x_{94} + 86.72x_{95} + 76.62x_{96}$
+
+Remove Vertical Outliers
+Outliers were removed to prevent skewed model coefficients and to ensure a more accurate fit within the typical price range. 
+```{r}
+no7_I <- pPoly_M_LM
+std_resid <- rstandard(no7_I)
+scaled_data <- datPP[abs(std_resid) <= 2, ]
+```
+
+In preparation for the metrics diagnoses we just assign new variables split the same way as the previous data.
+As the independent variables are already standardized there is no reason to repeat the standardization process.
+Price was never standardized.
+```{r}
+set.seed(1234)
+
+sample <- sample(c(TRUE, FALSE), nrow(scaled_data), replace=TRUE, prob=c(0.8,0.2))
+train_desc  <- scaled_data[sample, ]
+valid_desc   <- scaled_data[!sample, ]
+```
+
+Metric Diagnostics against validation
+RMSE (Root Mean Squared Error) is an appropriate metric for this regression problem because it provides a measure of how far the predicted prices deviate from the actual prices in terms of the same unit (price). It penalizes larger errors more heavily, making it useful when large errors are especially undesirable. The lower the RMSE, the better the model fits the data.
+```{r}
+predfLM <- fLM %>% predict(valid_desc)
+
+predicted_prices_valid <- predict(fLM, newdata = valid_desc)
+
+valid_desc$predicted_price <- predicted_prices_valid
+
+validation_rmse <- rmse(predfLM, valid_desc$price)
+```
+
+In order to be able to predict accurately, the test dataset has to be standardized the exact same way the training
+and validation was standardized. 
+```{r}
+testPP <- test
+
+# Convert 'season' and 'close_to_beach' into factors if not already
+testPP$season <- as.factor(testPP$season)
+testPP$close_to_beach <- as.factor(testPP$close_to_beach)
+
+# Create dummy variables for each season level
+season_dummies <- model.matrix(~ season - 1, data = testPP)
+
+# Add the dummy variables back to the original data frame
+testPP <- cbind(testPP, season_dummies)
+testPP$season <- NULL
+
+# Convert 'close_to_beach' to a factor (if it's not already)
+testPP$close_to_beach <- as.factor(testPP$close_to_beach)
+
+# Create a dummy variable for 'close_to_beach'
+# Assuming "Yes" = 1, "No" = 0
+testPP$close_to_beachYes <- ifelse(testPP$close_to_beach == "Yes", 1, 0)
+
+# Optionally, remove the original 'close_to_beach' column
+testPP$close_to_beach <- NULL
+
+# Create dummy variables for each level of 'area'
+area_dummies <- model.matrix(~ area - 1, data = testPP)
+
+# Rename the columns to the desired names
+colnames(area_dummies) <- c("areaA", "areaB", "areaC", "areaS")
+
+# Add the dummy variables back to the original data frame
+testPP <- cbind(testPP, area_dummies)
+area_num <- NULL
+
+# Scale numerical variables (standardization)
+numeric_cols <- c("dist", "rating", "size", "rooms", "max_guests", "bathrooms")
+testPP[numeric_cols] <- scale(testPP[numeric_cols])
+
+scaled_test_data <- testPP
+```
+
+Fit model on test data and export predictions.
+```{r}
+predicted_prices_test <- predict(fLM, newdata = scaled_test_data)
+
+scaled_test_data$predicted_price_test <- predicted_prices_test
+
+write.table(scaled_test_data$predicted_price_test, file = "Round3PredFINAL.txt", sep = "\t", row.names = FALSE, quote = TRUE)
+
+```
+In conclusion, we selected a model that balances complexity with accuracy by incorporating polynomial terms and interaction effects while controlling for outliers and multicollinear variables. The final model offers a robust prediction of Airbnb prices with a well-calibrated RMSE on the validation set.
